@@ -1,5 +1,7 @@
 pub mod lc;
 pub mod rr;
-pub mod source;
+mod none;
 
-use crate::core::server::Server;
+trait LoadBalancer {
+    fn select_server(&mut self) -> Option<String>;
+}

@@ -26,3 +26,7 @@ impl Handler {
     }
 }
 
+
+trait Handler {
+    fn handle(&self) -> String;
+}

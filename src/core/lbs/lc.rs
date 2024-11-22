@@ -1,13 +1,15 @@
-struct LeastConn {}
+use std::collections::HashMap;
+
+struct LeastConn {
+    servers: Vec<String>,
+    servers_and_count: HashMap<String, usize>,
+}
 
 impl LeastConn {
     pub fn new() -> Self {
-        Self {}
-    }
-}
-
-impl LoadBalancer for LeastConn {
-    fn select_server(&self, servers: &Vec<Server>) -> Option<Server> {
-        Some(servers[0].clone())
+        Self {
+            servers: Vec::new(),
+            servers_and_count: HashMap::new(),
+        }
     }
 }

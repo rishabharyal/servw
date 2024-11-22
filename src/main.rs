@@ -11,9 +11,7 @@ fn main() -> std::io::Result<()> {
     let mut config = Config::new();
     
     match config.parse("http.conf") {
-        Ok(_) => {
-            println!("Config parsed successfully");
-        },
+        Ok(_) => {},
         Err(e) => {
             println!("Config parsing error: {}", e);
             exit(1);
