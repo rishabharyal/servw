@@ -154,8 +154,8 @@ impl Config {
         &self.lb_algo
     }
 
-    pub fn servers(&self) -> &[String] {
-        &self.servers
+    pub fn servers(&self) -> Vec<String> {
+        self.servers.clone()
     }
 
     pub fn root(&self) -> &str {

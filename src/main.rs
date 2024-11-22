@@ -5,6 +5,7 @@ use std::process::exit;
 
 use servw::config::Config;
 use servw::http_validator::HttpValidator;
+use servw::lbs::{LeastConn, LoadBalancer, None, RoundRobin};
 
 fn main() -> std::io::Result<()> {
 
@@ -23,6 +24,25 @@ fn main() -> std::io::Result<()> {
         println!("Error: Root folder does not exist");
         exit(1);
     }
+
+    // Based on the configuration, we will create instances of the load balancers, and handlers
+    //
+    let alb_type = config.lb_algo();
+
+    if alb_type == "off" {
+        println!("Load balancing is disabled. We will use cgi pass instead.");
+        return Ok(());
+    }
+
+    let mut lb: Box<dyn LoadBalancer> = match alb_type {
+        "none" => Box::new(None::new(config.servers())),
+        "roundrobin" => Box::new(RoundRobin::new(config.servers())),
+        "leastconn" => Box::new(LeastConn::new(config.servers())),
+        _ => {
+            println!("Error: Invalid load balancing algorithm");
+            exit(1);
+        }
+    };
 
     let port = config.listen();
     let listener = TcpListener::bind("127.0.0.1:".to_string() + port)?;

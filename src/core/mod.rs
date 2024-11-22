@@ -1,3 +1,5 @@
 pub mod config;
 pub mod http_validator;
-mod lbs;
+
+pub mod lbs;
+pub mod handlers;

@@ -1,7 +1,11 @@
 pub mod lc;
 pub mod rr;
-mod none;
+pub mod none;
 
-trait LoadBalancer {
+pub trait LoadBalancer {
     fn select_server(&mut self) -> Option<String>;
 }
+
+pub use self::none::*;
+pub use self::lc::*;
+pub use self::rr::*;

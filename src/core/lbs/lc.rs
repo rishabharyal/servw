@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 
-struct LeastConn {
+pub struct LeastConn {
     servers: Vec<String>,
     servers_and_count: HashMap<String, usize>,
 }
 
 impl LeastConn {
-    pub fn new() -> Self {
+    pub fn new(servers: Vec<String>) -> Self {
         Self {
-            servers: Vec::new(),
+            servers,
             servers_and_count: HashMap::new(),
         }
     }
