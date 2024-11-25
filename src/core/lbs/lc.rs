@@ -28,6 +28,11 @@ impl LoadBalancer for LeastConn {
             }
         }
 
+        println!("<<<<<<<<<<<<< Connections Status >>>>>>>>>>>>>>>>>>>>>");
+        for (i, c) in self.connections.iter().enumerate() {
+            println!("{}: {} connected clients", i, c);
+        }
+
         self.connections[least_connection_index] += 1;
         Some(self.servers[least_connection_index].clone())
         

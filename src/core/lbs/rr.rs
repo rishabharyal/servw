@@ -24,7 +24,12 @@ impl LoadBalancer for RoundRobin {
 
         let current = self.last_index;
         self.last_index = (self.last_index+1) % self.slen;
+        println!("current index: {}", current);
         Some(self.servers[current].clone())
+    }
+
+    fn request_complete(&mut self, _server: String) {
+        println!("request complete: {}", _server);
     }
 }
 

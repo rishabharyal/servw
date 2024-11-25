@@ -1,8 +1,7 @@
 use crate::handlers::Handler;
+use std::net::TcpStream;
 
-pub struct CgiHandler {
-
-}
+pub struct CgiHandler {}
 
 impl CgiHandler {
     pub fn new() -> Self {
@@ -11,7 +10,7 @@ impl CgiHandler {
 }
 
 impl Handler for CgiHandler {
-    fn handle(&self) -> String {
+    fn handle(&self, _stream: &TcpStream) -> String {
         "done".to_string()
     }
 }
