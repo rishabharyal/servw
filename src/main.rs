@@ -6,6 +6,7 @@ use std::process::exit;
 use servw::config::Config;
 use servw::http_validator::HttpValidator;
 use servw::lbs::{LeastConn, LoadBalancer, None, RoundRobin};
+use servw::handlers::{CgiHandler, Handler, ServerHandler};
 
 fn main() -> std::io::Result<()> {
 
@@ -25,16 +26,24 @@ fn main() -> std::io::Result<()> {
         exit(1);
     }
 
-    // Based on the configuration, we will create instances of the load balancers, and handlers
-    //
+    let port = config.listen();
+    let listener = TcpListener::bind("127.0.0.1:".to_string() + port)?;
     let alb_type = config.lb_algo();
 
     if alb_type == "off" {
         println!("Load balancing is disabled. We will use cgi pass instead.");
+        for stream in listener.incoming() {
+            std::thread::spawn(move || {
+                let cgi_handler: dyn Handler = CgiHandler::new();
+                if let Err(e) = handle_connection(stream.unwrap(), cgi_handler) {
+                    println!("Connection error: {}", e);
+                }
+            });
+        }
         return Ok(());
     }
 
-    let mut lb: Box<dyn LoadBalancer> = match alb_type {
+    let lb: Box<dyn LoadBalancer> = match alb_type {
         "none" => Box::new(None::new(config.servers())),
         "roundrobin" => Box::new(RoundRobin::new(config.servers())),
         "leastconn" => Box::new(LeastConn::new(config.servers())),
@@ -44,13 +53,13 @@ fn main() -> std::io::Result<()> {
         }
     };
 
-    let port = config.listen();
-    let listener = TcpListener::bind("127.0.0.1:".to_string() + port)?;
 
     for stream in listener.incoming() {
         // handle in a thread so that we can keep listening for more connections
-        std::thread::spawn(move || {
-            if let Err(e) = handle_connection(stream.unwrap()) {
+
+        std::thread::spawn(move |lb| {
+            let handler: dyn Handler = ServerHandler::new(lb);
+            if let Err(e) = handle_connection(stream.unwrap(), handler) {
                 println!("Connection error: {}", e);
             }
         });
@@ -59,17 +68,7 @@ fn main() -> std::io::Result<()> {
     Ok(())
 }
 
-fn handle_connection(mut stream: TcpStream) -> std::io::Result<()> { 
-    // validate if the request is a valid HTTP request
-    let mut http_validator = HttpValidator::new(&mut stream);
-    if !http_validator.validate() {
-        stream.write(b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n Invalid HTTP request deteced!")?;
-        return Ok(());
-    }
-
-    // send a response back to the client
-    stream.write(b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n Welcome to ServW")?;
-    println!("Connection terminated");
-
+fn handle_connection(stream: TcpStream, handler: Box<dyn Handler>) -> std::io::Result<()> {
+    handler.handle(stream);
     Ok(())
 }

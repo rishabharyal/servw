@@ -4,6 +4,7 @@ pub mod none;
 
 pub trait LoadBalancer {
     fn select_server(&mut self) -> Option<String>;
+    fn request_complete(&mut self, _server: String) {}
 }
 
 pub use self::none::*;
