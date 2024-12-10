@@ -10,7 +10,7 @@ use servw::handlers::{CgiHandler, Handler, ServerHandler};
 fn main() -> std::io::Result<()> {
 
     let mut config = Config::new();
-    
+
     match config.parse("http.conf") {
         Ok(_) => {},
         Err(e) => {
@@ -55,45 +55,45 @@ fn main() -> std::io::Result<()> {
 
     let mutexlb = Arc::new(Mutex::new(lb));
     println!("starting listening to the incoming requests");
-for stream in listener.incoming() {
-    let mutexlb = mutexlb.clone();
-    std::thread::spawn(move || {
-        let handler: Box<dyn Handler> = Box::new(ServerHandler::new(mutexlb));
-        let mut stream = stream.unwrap(); 
-        match handle_connection(&stream, handler) {
-            Ok(result) => {
-                // Create proper HTTP response with headers
-                
-                // Single write with proper error handling
-                match stream.write_all(result.as_bytes()) {
-                    Ok(_) => {
-                        stream.flush().unwrap_or_default();
-                    },
-                    Err(e) => {
-                        println!("Write error: {}", e);
+    for stream in listener.incoming() {
+        let mutexlb = mutexlb.clone();
+        std::thread::spawn(move || {
+            let handler: Box<dyn Handler> = Box::new(ServerHandler::new(mutexlb));
+            let mut stream = stream.unwrap(); 
+            match handle_connection(&stream, handler) {
+                Ok(result) => {
+                    // Create proper HTTP response with headers
+
+                    // Single write with proper error handling
+                    match stream.write_all(result.as_bytes()) {
+                        Ok(_) => {
+                            stream.flush().unwrap_or_default();
+                        },
+                        Err(e) => {
+                            println!("Write error: {}", e);
+                        }
                     }
                 }
-            }
-            Err(e) => {
-                println!("Connection error: {}", e);
-                let error_response = format!(
-                    "HTTP/1.1 500 Internal Server Error\r\n\
-                    Content-Length: {}\r\n\
-                    Content-Type: text/plain\r\n\
-                    Connection: close\r\n\
-                    \r\n\
-                    {}", 
-                    e.to_string().len(),
-                    e
-                );
-                if let Err(write_err) = stream.write_all(error_response.as_bytes()) {
-                    println!("Error writing error response: {}", write_err);
+                Err(e) => {
+                    println!("Connection error: {}", e);
+                    let error_response = format!(
+                        "HTTP/1.1 500 Internal Server Error\r\n\
+                            Content-Length: {}\r\n\
+                            Content-Type: text/plain\r\n\
+                            Connection: close\r\n\
+                            \r\n\
+                            {}", 
+                        e.to_string().len(),
+                        e
+                    );
+                    if let Err(write_err) = stream.write_all(error_response.as_bytes()) {
+                        println!("Error writing error response: {}", write_err);
+                    }
+                    stream.flush().unwrap_or_default();
                 }
-                stream.flush().unwrap_or_default();
             }
-        }
-    });
-}
+        });
+    }
     Ok(())
 }
 
