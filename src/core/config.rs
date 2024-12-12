@@ -1,6 +1,6 @@
 use std::io::{self, Error, ErrorKind};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Config {
     listen: String,
     index: String,
@@ -82,7 +82,7 @@ impl Config {
                         return Err(Error::new(ErrorKind::InvalidData, "Invalid alb_algo directive"));
                     }
                     match parts[1] {
-                        "none" | "roundrobin" | "leastconn" | "source" => {
+                        "none" | "roundrobin" | "leastconn" | "source" | "off" => {
                             self.lb_algo = parts[1].to_string();
                         }
                         _ => {

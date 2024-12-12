@@ -30,13 +30,45 @@ fn main() -> std::io::Result<()> {
     let listener = TcpListener::bind("127.0.0.1:".to_string() + port)?;
     let alb_type = config.lb_algo();
 
+
+    println!("alb_type: {:?}", alb_type);
+
     if alb_type == "off" {
         println!("Load balancing is disabled. We will use cgi pass instead.");
         for stream in listener.incoming() {
+            let config = config.clone();
             std::thread::spawn(move || {
-                let cgi_handler: Box<dyn Handler> = Box::new(CgiHandler::new());
-                if let Err(e) = handle_connection(stream.as_ref().unwrap(), cgi_handler) {
-                    println!("Connection error: {}", e);
+                let mut stream = stream.unwrap();
+                // copy the config to pass to CgiHandler
+                let cgi_handler: Box<dyn Handler> = Box::new(CgiHandler::new(config));
+                match handle_connection(&stream, cgi_handler) {
+                    Ok(result) => {
+                        match stream.write_all(result.as_bytes()) {
+                            Ok(_) => {
+                                stream.flush().unwrap_or_default();
+                            },
+                            Err(e) => {
+                                println!("Write error: {}", e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        println!("Connection error: {}", e);
+                        let error_response = format!(
+                            "HTTP/1.1 500 Internal Server Error\r\n\
+                                Content-Length: {}\r\n\
+                                Content-Type: text/plain\r\n\
+                                Connection: close\r\n\
+                                \r\n\
+                                {}", 
+                            e.to_string().len(),
+                            e
+                        );
+                        if let Err(write_err) = stream.write_all(error_response.as_bytes()) {
+                            println!("Error writing error response: {}", write_err);
+                        }
+                        stream.flush().unwrap_or_default();
+                    }
                 }
             });
         }
@@ -62,8 +94,6 @@ fn main() -> std::io::Result<()> {
             let mut stream = stream.unwrap(); 
             match handle_connection(&stream, handler) {
                 Ok(result) => {
-                    // Create proper HTTP response with headers
-
                     // Single write with proper error handling
                     match stream.write_all(result.as_bytes()) {
                         Ok(_) => {
