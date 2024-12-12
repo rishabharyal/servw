@@ -1,33 +1,133 @@
 use std::net::{TcpListener, TcpStream};
-use std::io::{Read, Write};
-
+use std::path::Path;
+use std::process::exit;
+use std::sync::{Arc, Mutex};
+use std::io::Write;
+use servw::config::Config;
+use servw::lbs::{LeastConn, LoadBalancer, None, RoundRobin};
+use servw::handlers::{CgiHandler, Handler, ServerHandler};
 
 fn main() -> std::io::Result<()> {
-    let listener = TcpListener::bind("127.0.0.1:3000")?;
 
+    let mut config = Config::new();
+
+    match config.parse("http.conf") {
+        Ok(_) => {},
+        Err(e) => {
+            println!("Config parsing error: {}", e);
+            exit(1);
+        }
+    }
+
+    // check if the root folder exists
+    if !Path::new(&config.root()).exists() {
+        println!("Error: Root folder does not exist");
+        exit(1);
+    }
+
+    let port = config.listen();
+    println!("Listening to port {}", port);
+    let listener = TcpListener::bind("127.0.0.1:".to_string() + port)?;
+    let alb_type = config.lb_algo();
+
+
+    println!("alb_type: {:?}", alb_type);
+
+    if alb_type == "off" {
+        println!("Load balancing is disabled. We will use cgi pass instead.");
+        for stream in listener.incoming() {
+            let config = config.clone();
+            std::thread::spawn(move || {
+                let mut stream = stream.unwrap();
+                // copy the config to pass to CgiHandler
+                let cgi_handler: Box<dyn Handler> = Box::new(CgiHandler::new(config));
+                match handle_connection(&stream, cgi_handler) {
+                    Ok(result) => {
+                        match stream.write_all(result.as_bytes()) {
+                            Ok(_) => {
+                                stream.flush().unwrap_or_default();
+                            },
+                            Err(e) => {
+                                println!("Write error: {}", e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        println!("Connection error: {}", e);
+                        let error_response = format!(
+                            "HTTP/1.1 500 Internal Server Error\r\n\
+                                Content-Length: {}\r\n\
+                                Content-Type: text/plain\r\n\
+                                Connection: close\r\n\
+                                \r\n\
+                                {}", 
+                            e.to_string().len(),
+                            e
+                        );
+                        if let Err(write_err) = stream.write_all(error_response.as_bytes()) {
+                            println!("Error writing error response: {}", write_err);
+                        }
+                        stream.flush().unwrap_or_default();
+                    }
+                }
+            });
+        }
+        return Ok(());
+    }
+
+    let lb: Box<dyn LoadBalancer> = match alb_type {
+        "none" => Box::new(None::new(config.servers())),
+        "roundrobin" => Box::new(RoundRobin::new(config.servers())),
+        "leastconn" => Box::new(LeastConn::new(config.servers())),
+        _ => {
+            println!("Error: Invalid load balancing algorithm");
+            exit(1);
+        }
+    };
+
+    let mutexlb = Arc::new(Mutex::new(lb));
+    println!("starting listening to the incoming requests");
     for stream in listener.incoming() {
-
-        // handle in a thread so that we can keep listening for more connections
-        println!("Incoming connection");
+        let mutexlb = mutexlb.clone();
         std::thread::spawn(move || {
-            if let Err(e) = handle_connection(stream.unwrap()) {
-                println!("Connection error: {}", e);
+            let handler: Box<dyn Handler> = Box::new(ServerHandler::new(mutexlb));
+            let mut stream = stream.unwrap(); 
+            match handle_connection(&stream, handler) {
+                Ok(result) => {
+                    // Single write with proper error handling
+                    match stream.write_all(result.as_bytes()) {
+                        Ok(_) => {
+                            stream.flush().unwrap_or_default();
+                        },
+                        Err(e) => {
+                            println!("Write error: {}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    println!("Connection error: {}", e);
+                    let error_response = format!(
+                        "HTTP/1.1 500 Internal Server Error\r\n\
+                            Content-Length: {}\r\n\
+                            Content-Type: text/plain\r\n\
+                            Connection: close\r\n\
+                            \r\n\
+                            {}", 
+                        e.to_string().len(),
+                        e
+                    );
+                    if let Err(write_err) = stream.write_all(error_response.as_bytes()) {
+                        println!("Error writing error response: {}", write_err);
+                    }
+                    stream.flush().unwrap_or_default();
+                }
             }
         });
     }
-
     Ok(())
-
 }
-fn handle_connection(mut stream: TcpStream) -> std::io::Result<()> { 
-    println!("Connection established");
-    let mut buffer = [0;1024];
-    stream.read(&mut buffer)?;
-    let _data = String::from_utf8_lossy(&buffer);
 
-    // send a response back to the client
-    stream.write(b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n")?;
-    println!("Connection terminated");
-
-    Ok(())
+fn handle_connection(stream: &TcpStream, handler: Box<dyn Handler>) -> Result<String, std::io::Error> {
+    let result = handler.handle(stream);
+    Ok(result)
 }
